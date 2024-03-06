@@ -25,8 +25,13 @@ if [ ! -d "$backup_path" ]; then
     mkdir -p "$backup_path"
 fi
 
+# Check if backup folder exists, create one if it does not
+if [ ! -d "$backup_path"/klipper ]; then
+    mkdir -p "$backup_path"/klipper
+fi
+
 # Git commands
-cd "$backup_path"
+cd "$backup_path/klipper"
 # Check if .git exists else init git repo
 if [ ! -d ".git" ]; then
     mkdir .git
@@ -77,7 +82,7 @@ if git ls-remote --exit-code --heads origin $branch_name >/dev/null 2>&1; then
     git pull origin "$branch_name"
     # Delete the pulled files so that the directory is empty again before copying the new backup
     # The pull is only needed so that the repository nows its on latest and does not require rebases or merges
-    find "$backup_path" -maxdepth 1 -mindepth 1 ! -name '.git' ! -name 'README.md' -exec rm -rf {} \;
+    find "$backup_path/klipper" -maxdepth 1 -mindepth 1 ! -name '.git' ! -name 'README.md' -exec rm -rf {} \;
 fi
 
 cd "$HOME"
@@ -97,25 +102,26 @@ while IFS= read -r path; do
         for file in $path; do
             # Check if it's a symbolic link
             if [ -h "$file" ]; then
-                echo "Skipping symbolic link: $file"
+                cp -r --parents "$file" "$backup_path/klipper/"
+                #echo "Skipping symbolic link: $file"
             # Check if file is an extra backup of printer.cfg moonraker/klipper seems to like to make 4-5 of these sometimes no need to back them all up as well.
             elif [[ $(basename "$file") =~ ^printer-[0-9]+_[0-9]+\.cfg$ ]]; then
                 echo "Skipping file: $file"
             else
-                rsync -R "$file" "$backup_path/"
+                cp -r --parents "$file" "$backup_path/klipper/"
             fi
         done
     fi
 done < <(grep -v '^#' "$parent_path/.env" | grep 'path_' | sed 's/^.*=//')
 
-cp "$parent_path"/.gitignore "$backup_path/.gitignore"
+cp "$parent_path"/.gitignore "$backup_path/klipper/.gitignore"
 
 # utilize gits native exclusion file .gitignore to add files that should not be uploaded to remote.
 # Loop through exclude array and add each element to the end of .gitignore
 for i in ${exclude[@]}; do
     # add new line to end of .gitignore if there is not one
-    [[ $(tail -c1 "$backup_path/.gitignore" | wc -l) -eq 0 ]] && echo "" >>"$backup_path/.gitignore"
-    echo $i >>"$backup_path/.gitignore"
+    [[ $(tail -c1 "$backup_path/klipper/.gitignore" | wc -l) -eq 0 ]] && echo "" >>"$backup_path/klipper/.gitignore"
+    echo $i >>"$backup_path/klipper/.gitignore"
 done
 
 # Individual commit message, if no parameter is set, use the current timestamp as commit message
@@ -125,10 +131,10 @@ else
     commit_message="New backup from $(date +"%x - %X")"
 fi
 
-cd "$backup_path"
+cd "$backup_path/klipper"
 # Create and add Readme to backup folder if it doesn't already exist
 if ! [ -f "README.md" ]; then
-    echo -e "# klipper-backup 💾 \nKlipper backup script for manual or automated GitHub backups \n\nThis backup is provided by [klipper-backup](https://github.com/Staubgeborener/klipper-backup)." >"$backup_path/README.md"
+    echo -e "# klipper-backup 💾 \nKlipper backup script for manual or automated GitHub backups \n\nThis backup is provided by [klipper-backup](https://github.com/Staubgeborener/klipper-backup)." >"$backup_path/klipper/README.md"
 fi
 # Untrack all files so that any new excluded files are correctly ignored and deleted from remote
 git rm -r --cached . >/dev/null 2>&1
@@ -141,4 +147,4 @@ fi
 git push -u origin "$branch_name"
 
 # Remove files except .git folder after backup so that any file deletions can be logged on next backup
-find "$backup_path" -maxdepth 1 -mindepth 1 ! -name '.git' ! -name 'README.md' -exec rm -rf {} \;
+find "$backup_path/klipper" -maxdepth 1 -mindepth 1 ! -name '.git' ! -name 'README.md' -exec rm -rf {} \;
